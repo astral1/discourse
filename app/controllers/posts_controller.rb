@@ -59,8 +59,16 @@ class PostsController < ApplicationController
   def update
     params.require(:post)
 
-    post = Post.where(id: params[:id]).first
+    post = Post.where(id: params[:id])
+    post = post.with_deleted if guardian.is_staff?
+    post = post.first
     post.image_sizes = params[:image_sizes] if params[:image_sizes].present?
+
+    if too_late_to(:edit, post)
+      render json: {errors: [I18n.t('too_late_to_edit')]}, status: 422
+      return
+    end
+
     guardian.ensure_can_edit!(post)
 
     # to stay consistent with the create api,
@@ -105,26 +113,28 @@ class PostsController < ApplicationController
   end
 
   def show
-    @post = find_post_from_params
-    @post.revert_to(params[:version].to_i) if params[:version].present?
-    render_post_json(@post)
+    post = find_post_from_params
+    display_post(post)
   end
 
   def by_number
-    @post = Post.where(topic_id: params[:topic_id], post_number: params[:post_number]).first
-    guardian.ensure_can_see!(@post)
-    @post.revert_to(params[:version].to_i) if params[:version].present?
-    render_post_json(@post)
+    post = find_post_from_params_by_number
+    display_post(post)
   end
 
   def reply_history
-    @post = Post.where(id: params[:id]).first
-    guardian.ensure_can_see!(@post)
-    render_serialized(@post.reply_history, PostSerializer)
+    post = find_post_from_params
+    render_serialized(post.reply_history, PostSerializer)
   end
 
   def destroy
     post = find_post_from_params
+
+    if too_late_to(:delete_post, post)
+      render json: {errors: [I18n.t('too_late_to_edit')]}, status: 422
+      return
+    end
+
     guardian.ensure_can_delete!(post)
 
     destroyer = PostDestroyer.new(current_user, post)
@@ -168,6 +178,7 @@ class PostsController < ApplicationController
 
   def revisions
     post_revision = find_post_revision_from_params
+    guardian.ensure_can_see!(post_revision)
     post_revision_serializer = PostRevisionSerializer.new(post_revision, scope: guardian, root: false)
     render_json_dump(post_revision_serializer)
   end
@@ -186,22 +197,14 @@ class PostsController < ApplicationController
 
   protected
 
-  def find_post_from_params
-    finder = Post.where(id: params[:id] || params[:post_id])
-    # Include deleted posts if the user is staff
-    finder = finder.with_deleted if current_user.try(:staff?)
-
-    post = finder.first
-    guardian.ensure_can_see!(post)
-    post
-  end
-
   def find_post_revision_from_params
     post_id = params[:id] || params[:post_id]
     revision = params[:revision].to_i
     raise Discourse::InvalidParameters.new(:revision) if revision < 2
 
     post_revision = PostRevision.where(post_id: post_id, number: revision).first
+    post_revision.post = find_post_from_params
+
     guardian.ensure_can_see!(post_revision)
     post_revision
   end
@@ -209,6 +212,10 @@ class PostsController < ApplicationController
   def render_post_json(post)
     post_serializer = PostSerializer.new(post, scope: guardian, root: false)
     post_serializer.add_raw = true
+    counts = PostAction.counts_for([post], current_user)
+    if counts && counts = counts[post.id]
+      post_serializer.post_actions = counts
+    end
     render_json_dump(post_serializer)
   end
 
@@ -251,6 +258,33 @@ class PostsController < ApplicationController
         # TODO this does not feel right, we should name what meta_data is allowed
         whitelisted[:meta_data] = params[:meta_data]
     end
+  end
+
+  def too_late_to(action, post)
+    !guardian.send("can_#{action}?", post) && post.user_id == current_user.id && post.edit_time_limit_expired?
+  end
+
+  def display_post(post)
+    post.revert_to(params[:version].to_i) if params[:version].present?
+    render_post_json(post)
+  end
+
+  def find_post_from_params
+    by_id_finder = Post.where(id: params[:id] || params[:post_id])
+    find_post_using(by_id_finder)
+  end
+
+  def find_post_from_params_by_number
+    by_number_finder = Post.where(topic_id: params[:topic_id], post_number: params[:post_number])
+    find_post_using(by_number_finder)
+  end
+
+  def find_post_using(finder)
+    # Include deleted posts if the user is staff
+    finder = finder.with_deleted if current_user.try(:staff?)
+    post = finder.first
+    guardian.ensure_can_see!(post)
+    post
   end
 
 end

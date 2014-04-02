@@ -56,8 +56,8 @@ Discourse.Utilities = {
     return "<img width='" + size + "' height='" + size + "' src='" + url + "' class='" + classes + "'" + title + ">";
   },
 
-  tinyAvatar: function(avatarTemplate) {
-    return Discourse.Utilities.avatarImg({avatarTemplate: avatarTemplate, size: 'tiny' });
+  tinyAvatar: function(avatarTemplate, options) {
+    return Discourse.Utilities.avatarImg(_.merge({avatarTemplate: avatarTemplate, size: 'tiny' }, options));
   },
 
   postUrl: function(slug, topicId, postNumber) {
@@ -180,6 +180,7 @@ Discourse.Utilities = {
     @returns true whenever the upload is valid
   **/
   validateUploadedFile: function(file, type) {
+
     // check that the uploaded file is authorized
     if (!Discourse.Utilities.isAuthorizedUpload(file)) {
       var extensions = Discourse.Utilities.authorizedExtensions();
@@ -209,7 +210,7 @@ Discourse.Utilities = {
     Check the extension of the file against the list of authorized extensions
 
     @method isAuthorizedUpload
-    @param {File} files The file we want to upload
+    @param {File} file The file we want to upload
   **/
   isAuthorizedUpload: function(file) {
     var extensions = Discourse.SiteSettings.authorized_extensions;
@@ -342,6 +343,11 @@ Discourse.Utilities = {
         return (arg === '' ? null : arg);
       }
     }
+  },
+
+  defaultHomepage: function() {
+    // the homepage is the first item of the 'top_menu' site setting
+    return Discourse.SiteSettings.top_menu.split("|")[0].split(",")[0];
   }
 
 };

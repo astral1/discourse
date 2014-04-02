@@ -8,14 +8,17 @@ required:
   site_contact_username: ''
   logo_url:
     client: true
-    default: '/assets/d-logo-sketch.png'
+    default: '/images/d-logo-sketch.png'
   logo_small_url:
     client: true
-    default: '/assets/d-logo-sketch-small.png'
+    default: '/images/d-logo-sketch-small.png'
+  digest_logo_url:
+    client: false
+    default: ''
   favicon_url:
     client: true
-    default: '/assets/default-favicon.ico'
-  apple_touch_icon_url: /assets/default-apple-touch-icon.png'
+    default: '/images/default-favicon.ico'
+  apple_touch_icon_url: '/images/default-apple-touch-icon.png'
   company_full_name: 'My Unconfigured Forum Ltd.'
   company_short_name: 'Unconfigured Forum'
   company_domain: 'www.example.com'
@@ -24,29 +27,33 @@ basic:
   default_locale:
     default: 'en'
     enum: 'LocaleSiteSetting'
+    refresh: true
+  allow_user_locale:
+    client: true
+    default: false
+  suggested_topics:
+    client: true
+    default: 5
+  default_external_links_in_new_tab: false
+  track_external_right_clicks:
+    client: true
+    default: false
   ga_tracking_code:
     client: true
     default: ''
   ga_domain_name:
     client: true
     default: ''
-  enable_wide_category_list:
+  ga_universal_tracking_code:
     client: true
-    default: true
-  category_featured_topics:
+    default: ''
+  ga_universal_domain_name:
     client: true
-    default: 3
-  topics_per_page: 30
-  posts_per_page:
-    client: true
-    default: 20
-  suggested_topics: 5
-  enable_mobile_theme:
-    client: true
-    default: true
+    default: 'auto'
   top_menu:
     client: true
-    default: 'latest|new|unread|favorited|categories'
+    refresh: true
+    default: 'latest|new|unread|starred|top|categories'
   post_menu:
     client: true
     default: 'like|edit|flag|delete|share|bookmark|reply'
@@ -56,17 +63,27 @@ basic:
   category_colors:
     client: true
     default: 'BF1E2E|F1592A|F7941D|9EB83B|3AB54A|12A89D|25AAE2|0E76BD|652D90|92278F|ED207B|8C6238|231F20|808281|B3B5B4|283890'
+  enable_mobile_theme:
+    client: true
+    default: true
   relative_date_duration:
     client: true
     default: 30
+  topics_per_period_in_top_summary: 20
+  topics_per_period_in_top_page: 50
+  redirect_new_users_to_top_page_duration: 7
+  category_featured_topics:
+    client: true
+    default: 3
+  topics_per_page: 30
+  posts_per_page:
+    client: true
+    default: 20
+  enable_badges:
+    client: true
+    default: false
 
 users:
-  enable_local_logins:
-    client: true
-    default: true
-  enable_local_account_create:
-    client: true
-    default: true
   invite_only:
     client: true
     default: false
@@ -76,9 +93,16 @@ users:
   must_approve_users:
     client: true
     default: false
+  enable_local_logins:
+    client: true
+    default: true
+  min_username_length:
+    client: true
+    default: 3
   min_password_length:
     client: true
     default: 8
+  block_common_passwords: true
   enable_google_logins:
     client: true
     default: true
@@ -95,34 +119,36 @@ users:
     default: true
   facebook_app_id: ''
   facebook_app_secret: ''
-  enable_cas_logins:
-    client: true
-    default: false
-  cas_hostname: ''
-  cas_domainname: ''
   enable_github_logins:
     client: true
     default: false
   github_client_id: ''
   github_client_secret: ''
-  enable_persona_logins:
+  enable_sso:
     client: true
     default: false
+  sso_url: ''
+  sso_secret: ''
+  sso_overrides_email: false
+  sso_overrides_username: false
+  sso_overrides_name: false
   enforce_global_nicknames: false
   discourse_org_access_key: ''
-  invite_expiry_days: 14
   username_change_period: 3
+  auto_track_topics_after: 240000
   email_editable: true
   enable_names:
     client: true
     default: true
+  invite_expiry_days: 4
   invites_shown:
     client: true
     default: 30
-  delete_user_max_age:
+  delete_user_max_post_age:
     client: true
-    default: 14
+    default: 60
   delete_all_posts_max: 15
+  redirect_users_to_top_page: true
 
 posting:
   min_post_length:
@@ -140,12 +166,14 @@ posting:
     default:
       test: 4000
       default: 32000
+  body_min_entropy: 7
   min_topic_title_length:
     client: true
     default: 15
   max_topic_title_length:
     client: true
     default: 255
+  title_min_entropy: 10
   title_prettify: true
   title_fancy_entities: true
   min_private_message_title_length:
@@ -154,6 +182,7 @@ posting:
   allow_uncategorized_topics:
     client: true
     default: true
+    refresh: true
   allow_duplicate_topic_titles: false
   min_title_similar_length:
     client: true
@@ -163,6 +192,7 @@ posting:
     default: 15
   enable_private_messages: true
   ninja_edit_window: 300
+  post_edit_time_limit: 525600
   edit_history_visible_to_public:
     client: true
     default: true
@@ -183,8 +213,6 @@ posting:
   newuser_max_replies_per_topic: 3
   newuser_max_mentions_per_post: 2
   onebox_max_chars: 5000
-  title_min_entropy: 10
-  body_min_entropy: 7
   max_word_length: 30
   newuser_max_links: 2
   newuser_max_images:
@@ -207,10 +235,15 @@ posting:
   default_code_lang:
     client: true
     default: "lang-auto"
+  warn_reviving_old_topic_age: 180
+  autohighlight_all_code:
+    client: true
+    default: false
 
 email:
   email_time_window_mins: 10
   email_posts_context: 5
+  digest_min_excerpt_length: 100
   default_digest_email_frequency:
     default: 7
     enum: 'DigestEmailSiteSetting'
@@ -222,6 +255,15 @@ email:
   pop3s_polling_port: 995
   pop3s_polling_username: ''
   pop3s_polling_password: ''
+  email_in:
+    default: false
+    client: true
+  email_in_address: ''
+  email_in_min_trust:
+    default: 3
+    enum: 'MinTrustToCreateTopicSetting'
+  email_in_category: -1
+  email_prefix: ''
 
 files:
   max_image_size_kb:
@@ -233,6 +275,7 @@ files:
   authorized_extensions:
     client: true
     default: '.jpg|.jpeg|.png|.gif'
+    refresh: true
   crawl_images:
     default:
       test: false
@@ -243,6 +286,11 @@ files:
   max_image_height:
     client: true
     default: 500
+  download_remote_images_to_local:
+    default:
+      test: false
+      default: true
+  download_remote_images_threshold: 20
   create_thumbnails: true
   clean_up_uploads: false
   clean_orphan_uploads_grace_period_hours: 1
@@ -254,6 +302,9 @@ files:
     default: ''
     enum: 'S3RegionSiteSetting'
   s3_upload_bucket: ''
+  allow_profile_backgrounds:
+    client: true
+    default: true
   allow_uploaded_avatars:
     client: true
     default: true
@@ -262,16 +313,13 @@ files:
     default: false
   detect_custom_avatars: true
   max_daily_gravatar_crawls: 500
-  download_remote_images_to_local:
-    default:
-      test: false
-      default: true
-  download_remote_images_threshold:
-    default: 20
 
 trust:
   default_trust_level: 0
   default_invitee_trust_level: 1
+  min_trust_to_create_topic:
+    default: 0
+    enum: 'MinTrustToCreateTopicSetting'
   basic_requires_topics_entered: 5
   basic_requires_read_posts: 50
   basic_requires_time_spent_mins: 15
@@ -282,41 +330,27 @@ trust:
   regular_requires_likes_received: 1
   regular_requires_likes_given: 1
   regular_requires_topic_reply_count: 3
-  min_trust_to_create_topic:
-    default: 0
-    enum: 'MinTrustToCreateTopicSetting'
 
 security:
   enable_flash_video_onebox: false
-  use_ssl: false
-  enable_escaped_fragments:
-    client: true
-    default: false
-
-seo:
-  add_rel_nofollow_to_user_content: true
-  exclude_rel_nofollow_domains: ''
+  use_https: false
+  enable_escaped_fragments: true
   allow_index_in_robots_txt: true
-  enable_noscript_support:
-    client: true
-    default: true
+  enable_noscript_support: true
 
 spam:
-  email_domains_blacklist:
-    client: true
-    default: 'mailinator.com'
-  email_domains_whitelist:
-    client: true
-    default: ''
+  add_rel_nofollow_to_user_content: true
+  exclude_rel_nofollow_domains: ''
+  email_domains_blacklist: 'mailinator.com'
+  email_domains_whitelist: ''
   flags_required_to_hide_post: 3
   cooldown_minutes_after_hiding_posts: 10
-  max_topics_in_first_day: 5
-  max_replies_in_first_day: 10
   num_flags_to_block_new_user: 3
   num_users_to_block_new_user: 3
   notify_mods_when_user_blocked: false
   flag_sockpuppets: true
   newuser_spam_host_threshold: 3
+  white_listed_spam_host_domains: ""
 
 rate_limits:
   unique_posts_mins:
@@ -331,7 +365,9 @@ rate_limits:
   max_bookmarks_per_day: 20
   max_flags_per_day: 20
   max_edits_per_day: 30
-  max_favorites_per_day: 20
+  max_stars_per_day: 20
+  max_topics_in_first_day: 5
+  max_replies_in_first_day: 10
 
 developer:
   force_hostname: ''
@@ -343,57 +379,90 @@ developer:
     default:
       test: false
       default: true
-
-uncategorized:
-  tos_url:
-    client: true
-    default: ''
-  faq_url:
-    client: true
-    default: ''
-  privacy_policy_url:
-    client: true
-    default: ''
-
-  track_external_right_clicks:
-    client: true
-    default: false
-
   enable_long_polling:
     client: true
     default: true
+  long_polling_interval: 15000
   polling_interval:
     client: true
     default: 3000
   anon_polling_interval:
     client: true
     default: 30000
-  min_search_term_length:
-    client: true
-    default: 3
   flush_timings_secs:
     client: true
     default: 5
+  active_user_rate_limit_secs: 60
+
+embedding:
+  embeddable_host: ''
+  feed_polling_enabled: false
+  feed_polling_url: ''
+  embed_by_username: ''
+  embed_category: ''
+  embed_post_limit: 100
+  embed_truncate: false
+
+legal:
+  tos_url:
+    client: true
+    default: ''
+  privacy_policy_url:
+    client: true
+    default: ''
+  tos_accept_required:
+    client: true
+    default: false
+  faq_url:
+    client: true
+    default: ''
+
+backups:
+  allow_restore:
+    client: true
+    default: false
+  maximum_backups:
+    client: true
+    default: 7
+  backup_daily:
+    client: false
+    default: false
+  enable_s3_backups:
+    client: false
+    default: false
+  s3_backup_bucket:
+    client: false
+
+uncategorized:
   version_checks:
     client: true
     default: true
   new_version_emails: true
-  auto_track_topics_after: 240000
+  send_welcome_message: true
+
+  suppress_uncategorized_badge:
+    client: true
+    default: true
+
+  # Search
+  min_posts_for_search_in_topic: 10
+  min_search_term_length:
+    client: true
+    default: 3
+  max_similar_results: 7
+  minimum_topics_similar: 50
+
   new_topic_duration_minutes: 2880
-  long_polling_interval: 15000
-  active_user_rate_limit_secs: 60
   previous_visit_timeout_hours: 1
   staff_like_weight: 3
+
+  # Summary mode
   summary_score_threshold: 15
   summary_posts_required: 50
   summary_likes_required: 1
   summary_percent_filter: 20
-  send_welcome_message: true
-  allow_import: false
-  educate_until_posts:
-    client: true
-    default: 2
-  max_similar_results: 7
+
+  # View heat thresholds
   topic_views_heat_low:
     client: true
     default: 1000
@@ -403,8 +472,27 @@ uncategorized:
   topic_views_heat_high:
     client: true
     default: 5000
-  minimum_topics_similar: 50
+
+  # Warnings
+  educate_until_posts: 2
   sequential_replies_threshold: 2
   dominating_topic_minimum_percent: 20
 
+  global_notice:
+    default: ""
+    client: true
+  has_login_hint:
+    default: false
+    hidden: true
+
+  # Category IDs
+  lounge_category_id:
+    default: -1
+    hidden: true
+  meta_category_id:
+    default: -1
+    hidden: true
+  staff_category_id:
+    default: -1
+    hidden: true
 

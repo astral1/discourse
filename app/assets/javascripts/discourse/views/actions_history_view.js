@@ -47,6 +47,7 @@ Discourse.ActionsHistoryComponent = Em.Component.extend({
           var key = 'post.actions.people.' + c.get('actionType.name_key');
           if (postUrl) { key = key + "_with_url"; }
 
+          // TODO postUrl might be uninitialized? pick a good default
           buffer.push(" " + I18n.t(key, { icons: iconsHtml, postUrl: postUrl}) + ".");
         }
         renderActionIf('usersCollapsed', 'who-acted', c.get('description'));
@@ -62,7 +63,7 @@ Discourse.ActionsHistoryComponent = Em.Component.extend({
     if (post.get('deleted')) {
       buffer.push("<div class='post-action'>" +
                   I18n.t("post.deleted_by") + " " +
-                  Discourse.Utilities.tinyAvatar(post.get('postDeletedBy.avatar_template')) +
+                  Discourse.Utilities.tinyAvatar(post.get('postDeletedBy.avatar_template'), {title: post.get('postDeletedBy.username')}) +
                   Discourse.Formatter.autoUpdatingRelativeAge(new Date(post.get('postDeletedAt'))) +
                   "</div>");
     }

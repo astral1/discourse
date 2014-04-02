@@ -52,6 +52,8 @@ class Post < ActiveRecord::Base
   scope :private_posts, -> { joins(:topic).where('topics.archetype = ?', Archetype.private_message) }
   scope :with_topic_subtype, ->(subtype) { joins(:topic).where('topics.subtype = ?', subtype) }
 
+  delegate :username, to: :user
+
   def self.hidden_reasons
     @hidden_reasons ||= Enum.new(:flag_threshold_reached, :flag_threshold_reached_again, :new_user_spam_threshold_reached)
   end
@@ -60,11 +62,12 @@ class Post < ActiveRecord::Base
     @types ||= Enum.new(:regular, :moderator_action)
   end
 
+  def self.cook_methods
+    @cook_methods ||= Enum.new(:regular, :raw_html)
+  end
+
   def self.find_by_detail(key, value)
-    includes(:post_details).where( "post_details.key = ? AND " +
-                                   "post_details.value = ?",
-                                   key,
-                                   value ).first
+    includes(:post_details).where(post_details: { key: key, value: value }).first
   end
 
   def add_detail(key, value, extra = nil)
@@ -98,12 +101,13 @@ class Post < ActiveRecord::Base
 
   def store_unique_post_key
     if SiteSetting.unique_posts_mins > 0
-      $redis.setex(unique_post_key, SiteSetting.unique_posts_mins.minutes.to_i, "1")
+      $redis.setex(unique_post_key, SiteSetting.unique_posts_mins.minutes.to_i, id)
     end
   end
 
   def matches_recent_post?
-    $redis.exists(unique_post_key)
+    post_id = $redis.get(unique_post_key)
+    post_id != nil and post_id != id
   end
 
   def raw_hash
@@ -127,7 +131,21 @@ class Post < ActiveRecord::Base
   end
 
   def cook(*args)
-    Plugin::Filter.apply(:after_post_cook, self, post_analyzer.cook(*args))
+    # For some posts, for example those imported via RSS, we support raw HTML. In that
+    # case we can skip the rendering pipeline.
+    return raw if cook_method == Post.cook_methods[:raw_html]
+
+    # Default is to cook posts
+    cooked = if !self.user || !self.user.has_trust_level?(:leader)
+      post_analyzer.cook(*args)
+    else
+      # At trust level 3, we don't apply nofollow to links
+      cloned = args.dup
+      cloned[1] ||= {}
+      cloned[1][:omit_nofollow] = true
+      post_analyzer.cook(*cloned)
+    end
+    Plugin::Filter.apply( :after_post_cook, self, cooked )
   end
 
   # Sometimes the post is being edited by someone else, for example, a mod.
@@ -141,8 +159,29 @@ class Post < ActiveRecord::Base
     @acting_user = pu
   end
 
+  def whitelisted_spam_hosts
+
+    hosts = SiteSetting
+              .white_listed_spam_host_domains
+              .split(",")
+              .map{|h| h.strip}
+              .reject{|h| !h.include?(".")}
+
+    hosts << GlobalSetting.hostname
+
+  end
+
   def total_hosts_usage
     hosts = linked_hosts.clone
+    whitelisted = whitelisted_spam_hosts
+
+    hosts.reject! do |h|
+      whitelisted.any? do |w|
+        h.end_with?(w)
+      end
+    end
+
+    return hosts if hosts.length == 0
 
     TopicLink.where(domain: hosts.keys, user_id: acting_user.id)
              .group(:domain, :post_id)
@@ -200,16 +239,19 @@ class Post < ActiveRecord::Base
     cooked
   end
 
-  def username
-    user.username
-  end
-
   def external_id
     "#{topic_id}/#{post_number}"
   end
 
   def quoteless?
     (quote_count == 0) && (reply_to_post_number.present?)
+  end
+
+  def reply_to_post
+    return if reply_to_post_number.blank?
+    @reply_to_post ||= Post.where("topic_id = :topic_id AND post_number = :post_number",
+                                  topic_id: topic_id,
+                                  post_number: reply_to_post_number).first
   end
 
   def reply_notification_target
@@ -228,19 +270,6 @@ class Post < ActiveRecord::Base
   # Strip out most of the markup
   def excerpt(maxlength = nil, options = {})
     Post.excerpt(cooked, maxlength, options)
-  end
-
-
-  # A list of versions including the initial version
-  def all_versions
-    result = []
-    result << { number: 1, display_username: user.username, created_at: created_at }
-    versions.order(:number).includes(:user).each do |v|
-      if v.user.present?
-        result << { number: v.number, display_username: v.user.username, created_at: v.created_at }
-      end
-    end
-    result
   end
 
   def is_first_post?
@@ -291,9 +320,9 @@ class Post < ActiveRecord::Base
 
   # This calculates the geometric mean of the post timings and stores it along with
   # each post.
-  def self.calculate_avg_time
+  def self.calculate_avg_time(min_topic_age=nil)
     retry_lock_error do
-      exec_sql("UPDATE posts
+      builder = SqlBuilder.new("UPDATE posts
                 SET avg_time = (x.gmean / 1000)
                 FROM (SELECT post_timings.topic_id,
                              post_timings.post_number,
@@ -304,9 +333,18 @@ class Post < ActiveRecord::Base
                           AND p2.topic_id = post_timings.topic_id
                           AND p2.user_id <> post_timings.user_id
                       GROUP BY post_timings.topic_id, post_timings.post_number) AS x
-                WHERE x.topic_id = posts.topic_id
+                /*where*/")
+
+      builder.where("x.topic_id = posts.topic_id
                   AND x.post_number = posts.post_number
                   AND (posts.avg_time <> (x.gmean / 1000)::int OR posts.avg_time IS NULL)")
+
+      if min_topic_age
+        builder.where("posts.topic_id IN (SELECT id FROM topics where bumped_at > :bumped_at)",
+                     bumped_at: min_topic_age)
+      end
+
+      builder.exec
     end
   end
 
@@ -400,6 +438,14 @@ class Post < ActiveRecord::Base
     end
   end
 
+  def edit_time_limit_expired?
+    if created_at && SiteSetting.post_edit_time_limit.to_i > 0
+      created_at < SiteSetting.post_edit_time_limit.to_i.minutes.ago
+    else
+      false
+    end
+  end
+
   private
 
   def parse_quote_into_arguments(quote)
@@ -460,7 +506,6 @@ end
 #  created_at              :datetime         not null
 #  updated_at              :datetime         not null
 #  reply_to_post_number    :integer
-#  version                 :integer          default(1), not null
 #  reply_count             :integer          default(0), not null
 #  quote_count             :integer          default(0), not null
 #  deleted_at              :datetime
@@ -489,9 +534,13 @@ end
 #  like_score              :integer          default(0), not null
 #  deleted_by_id           :integer
 #  edit_reason             :string(255)
+#  word_count              :integer
+#  version                 :integer          default(1), not null
+#  cook_method             :integer          default(1), not null
 #
 # Indexes
 #
+#  idx_posts_created_at_topic_id            (created_at,topic_id)
 #  idx_posts_user_id_deleted_at             (user_id)
 #  index_posts_on_reply_to_post_number      (reply_to_post_number)
 #  index_posts_on_topic_id_and_post_number  (topic_id,post_number) UNIQUE

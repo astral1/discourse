@@ -22,7 +22,7 @@ Discourse.TopicController = Discourse.ObjectController.extend(Discourse.Selected
 
   actions: {
     jumpTop: function() {
-      Discourse.URL.routeTo(this.get('url'));
+      Discourse.URL.routeTo(this.get('firstPostUrl'));
     },
 
     jumpBottom: function() {
@@ -163,7 +163,8 @@ Discourse.TopicController = Discourse.ObjectController.extend(Discourse.Selected
     },
 
     togglePinned: function() {
-      this.get('content').toggleStatus('pinned');
+      // Note that this is different than clearPin
+      this.get('content').setStatus('pinned', this.get('pinned_at') ? false : true);
     },
 
     toggleArchived: function() {
@@ -224,7 +225,7 @@ Discourse.TopicController = Discourse.ObjectController.extend(Discourse.Selected
   }.property(),
 
   jumpTopDisabled: function() {
-    return (this.get('progressPosition') <= 3);
+    return (this.get('progressPosition') < 2);
   }.property('progressPosition'),
 
   jumpBottomDisabled: function() {
@@ -325,9 +326,13 @@ Discourse.TopicController = Discourse.ObjectController.extend(Discourse.Selected
     return false;
   },
 
-  showFavoriteButton: function() {
+  showStarButton: function() {
     return Discourse.User.current() && !this.get('isPrivateMessage');
   }.property('isPrivateMessage'),
+
+  loadingHTML: function() {
+    return "<div class='spinner'>" + I18n.t('loading') + "</div>";
+  }.property(),
 
   recoverTopic: function() {
     this.get('content').recover();
@@ -355,8 +360,16 @@ Discourse.TopicController = Discourse.ObjectController.extend(Discourse.Selected
         return;
       }
 
+      var postStream = topicController.get('postStream');
+      if (data.type === "revised" || data.type === "acted"){
+        // TODO we could update less data for "acted"
+        // (only post actions)
+        postStream.triggerChangedPost(data.id, data.updated_at);
+        return;
+      }
+
       // Add the new post into the stream
-      topicController.get('postStream').triggerNewPostInStream(data.id);
+      postStream.triggerNewPostInStream(data.id);
     });
   },
 
@@ -459,7 +472,15 @@ Discourse.TopicController = Discourse.ObjectController.extend(Discourse.Selected
         }
       ]);
     } else {
-      post.destroy(user);
+      post.destroy(user).then(null, function(e) {
+        post.undoDeleteState();
+        var response = $.parseJSON(e.responseText);
+        if (response && response.errors) {
+          bootbox.alert(response.errors[0]);
+        } else {
+          bootbox.alert(I18n.t('generic_error'));
+        }
+      });
     }
   },
 
@@ -515,6 +536,8 @@ Discourse.TopicController = Discourse.ObjectController.extend(Discourse.Selected
         firstLoadedPost = postStream.get('firstLoadedPost');
 
     this.set('currentPost', post.get('post_number'));
+
+    if (post.get('post_number') === 1) { return; }
 
     if (firstLoadedPost && firstLoadedPost === post) {
       // Note: jQuery shouldn't be done in a controller, but how else can we

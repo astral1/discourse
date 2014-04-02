@@ -2,6 +2,9 @@
 # This file contains content for the client portion of Discourse, sent out
 # to the Javascript app.
 #
+# To work with us on translations, see:
+# https://www.transifex.com/projects/p/discourse-pt-br/
+#
 # To validate this YAML file after you change it, please paste it into
 # http://yamllint.com/
 
@@ -49,6 +52,8 @@ sv:
         almost_x_years:
           one:   "1y"
           other: "%{count}y"
+        date_month: "D MMM"
+        date_year: "MMM 'YY"
       medium:
         x_minutes:
           one: "1 min"
@@ -449,9 +454,6 @@ sv:
       github:
         title: "med GitHub"
         message: "Autentiserar med GitHub (kolla så att pop up-blockare inte är aktiverade)"
-      persona:
-        title: " med Persona"
-        message: "Autentiserar med Mozilla Persona (kolla så att pop up-blockare inte är aktiverade)"
 
     composer:
       posting_not_on_topic: "Du svarar på tråden \"{{title}}\", men du besöker just nu en annan tråd."
@@ -569,7 +571,7 @@ sv:
     go_back: 'gå tillbaka'
     current_user: 'gå till din användarsida'
 
-    favorite:
+    starred:
       title: 'Favorit'
       help:
         star: 'lägg till denna tråd i din favoritlista'
@@ -577,7 +579,7 @@ sv:
 
     topics:
       none:
-        favorited: "Du har inte favoritmarkerat några trådar än. För att favoritmarkera en tråd, klicka eller tryck på stjärnan brevid titeln."
+        starred: "Du har inte favoritmarkerat några trådar än. För att favoritmarkera en tråd, klicka eller tryck på stjärnan brevid titeln."
         unread: "Du har inga olästa trådar att läsa."
         new: "Du har inga nya trådar att läsa."
         read: "Du har inte läst några trådar än."
@@ -592,13 +594,8 @@ sv:
         read: "Det finns inga fler lästa trådar att läsa."
         new: "Det finns inga fler nya trådar att läsa."
         unread: "Det finns inga fler oläsa trådar att läsa."
-        favorited: "Det finns inga fler favoritmarkerade trådar att läsa."
+        starred: "Det finns inga fler favoritmarkerade trådar att läsa."
         category: "Det finns inga fler {{category}}-trådar."
-
-    rank_details:
-      toggle: växla på/av trådranksdetaljer
-      show: visa trådranksdetaljer
-      title: Trådranksdetaljer
 
     topic:
       filter_to: "Visa {{post_count}} inlägg i tråden"
@@ -809,8 +806,8 @@ sv:
       deleted_by: "deleted by"
       expand_collapse: "expand/collapse"
       gap:
-        one: "1 post omitted"
-        other: "{{count}} posts omitted"
+        one: "1 post hidden"
+        other: "{{count}} posts hidden"
 
       has_replies:
         one: "Svara"
@@ -827,7 +824,10 @@ sv:
         image_upload_not_allowed_for_new_user: "Tyvärr, nya användare kan inte ladda upp bilder."
         attachment_upload_not_allowed_for_new_user: "Tyvärr, nya användare kan inte ladda upp filer."
 
-      abandon: "Är du säker på att du vill överge ditt inlägg?"
+      abandon:
+        confirm: "Är du säker på att du vill överge ditt inlägg?"
+        no_value: "Nej"
+        yes_value: "Ja"
 
       archetypes:
         save: 'Spara Inställningar'
@@ -955,7 +955,7 @@ sv:
           previous: "Tidigare revision"
           next: "Nästa revision"
           last: "Sista revisionen"
-          comparing_previous_to_current_out_of_total: "<strong>#{{previous}}</strong> vs. <strong>#{{current}}</strong> (av {{total}})"
+          comparing_previous_to_current_out_of_total: "<strong>{{previous}}</strong> vs <strong>{{current}}</strong> (av {{total}})"
         displays:
           inline:
             title: "Show the rendered output with additions and removals inline"
@@ -997,7 +997,6 @@ sv:
       list: "Lista Kategorier"
       no_description: "Det finns ingen beskrivning för denna kategori."
       change_in_category_topic: "besök kategorins tråd för att ändra beskrivning"
-      hotness: "Hethet"
       already_used: 'Den här färgen används till en annan kategori'
       security: "Säkerhet"
       auto_close_label: "Stäng trådar automatiskt efter:"
@@ -1062,7 +1061,7 @@ sv:
       hot:
         title: "Hett"
         help: "ett urval av de hetaste trådarna"
-      favorited:
+      starred:
         title: "Favoriter"
         help: "trådar du favoritmarkerat"
       read:

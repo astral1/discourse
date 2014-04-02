@@ -23,6 +23,11 @@ class SiteSetting < ActiveRecord::Base
     load_settings(file)
   end
 
+  client_settings << :available_locales
+
+  def self.available_locales
+    LocaleSiteSetting.values.map{ |e| e[:value] }.join('|')
+  end
 
   def self.call_discourse_hub?
     self.enforce_global_nicknames? && self.discourse_org_access_key.present?
@@ -53,7 +58,12 @@ class SiteSetting < ActiveRecord::Base
   end
 
   def self.anonymous_menu_items
-    @anonymous_menu_items ||= Set.new ['latest', 'hot', 'categories', 'category']
+    @anonymous_menu_items ||= Set.new Discourse.anonymous_filters.map(&:to_s)
+  end
+
+  def self.normalized_embeddable_host
+    return embeddable_host if embeddable_host.blank?
+    embeddable_host.sub(/^https?\:\/\//, '')
   end
 
   def self.anonymous_homepage
@@ -85,7 +95,14 @@ class SiteSetting < ActiveRecord::Base
   end
 
   def self.scheme
-    use_ssl? ? "https" : "http"
+    use_https? ? "https" : "http"
+  end
+
+  def self.has_enough_topics_to_redirect_to_top
+    Topic.listable_topics
+         .visible
+         .where('topics.id NOT IN (SELECT COALESCE(topic_id, 0) FROM categories)')
+         .count > SiteSetting.topics_per_period_in_top_page
   end
 
 end

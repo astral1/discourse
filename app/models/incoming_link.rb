@@ -18,8 +18,12 @@ class IncomingLink < ActiveRecord::Base
     end
 
     if request.referer.present?
-      host = URI.parse(request.referer).host
-      referer = request.referer[0..999]
+      begin
+        host = URI.parse(request.referer).host
+        referer = request.referer[0..999]
+      rescue URI::InvalidURIError
+        # bad uri, skip
+      end
     end
 
     if host != request.host && (user_id || referer)
@@ -39,7 +43,8 @@ class IncomingLink < ActiveRecord::Base
   # Internal: Extract the domain from link.
   def extract_domain
     if referer.present?
-      self.domain = URI.parse(self.referer).host
+      # We may get a junk URI, just deal with it
+      self.domain = URI.parse(self.referer).host rescue nil
       self.referer = nil unless self.domain
     end
   end

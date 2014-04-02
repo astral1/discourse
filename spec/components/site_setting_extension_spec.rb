@@ -6,11 +6,71 @@ describe SiteSettingExtension do
 
   class FakeSettings
     extend SiteSettingExtension
-    provider = SiteSettings::LocalProcessProvider
+    self.provider = SiteSettings::LocalProcessProvider.new
+  end
+
+  class FakeSettings2
+    extend SiteSettingExtension
+    self.provider = FakeSettings.provider
   end
 
   let :settings do
     FakeSettings
+  end
+
+  let :settings2 do
+    FakeSettings2
+  end
+
+  describe "refresh!" do
+
+    it "will reset to default if provider vanishes" do
+      settings.setting(:hello, 1)
+      settings.hello = 100
+      settings.hello.should == 100
+
+      settings.provider.clear
+      settings.refresh!
+
+      settings.hello.should == 1
+    end
+
+    it "will set to new value if provider changes" do
+
+      settings.setting(:hello, 1)
+      settings.hello = 100
+      settings.hello.should == 100
+
+      settings.provider.save(:hello, 99, SiteSetting.types[:fixnum] )
+      settings.refresh!
+
+      settings.hello.should == 99
+    end
+
+    it "Publishes changes cross sites" do
+      settings.setting(:hello, 1)
+      settings2.setting(:hello, 1)
+
+      settings.hello = 100
+
+      settings2.refresh!
+      settings2.hello.should == 100
+
+      settings.hello = 99
+
+      settings2.refresh!
+      settings2.hello.should == 99
+    end
+
+  end
+
+  describe "multisite" do
+    it "has no db cross talk" do
+      settings.setting(:hello, 1)
+      settings.hello = 100
+      settings.provider.current_site = "boom"
+      settings.hello.should == 1
+    end
   end
 
   describe "int setting" do
@@ -58,6 +118,11 @@ describe SiteSettingExtension do
         settings.refresh!
         settings.test_setting.should_not == 77
       end
+
+      it "can be overridden with set" do
+        settings.set("test_setting", 12)
+        settings.test_setting.should == 12
+      end
     end
   end
 
@@ -88,6 +153,11 @@ describe SiteSettingExtension do
       it "should coerce int to string" do
         settings.test_str = 100
         settings.test_str.should.eql? "100"
+      end
+
+      it "can be overridden with set" do
+        settings.set("test_str", "hi")
+        settings.test_str.should == "hi"
       end
     end
   end
@@ -127,6 +197,11 @@ describe SiteSettingExtension do
         settings.setting(:test_hello?, false)
         settings.refresh!
         settings.test_hello?.should_not == false
+      end
+
+      it "can be overridden with set" do
+        settings.set("test_hello", true)
+        settings.test_hello?.should == true
       end
     end
   end
@@ -186,6 +261,16 @@ describe SiteSettingExtension do
         settings.test_setting = 102
         settings.all_settings.find {|s| s[:setting] == :test_setting }[:category].should == :tests
       end
+    end
+  end
+
+  describe "set for an invalid setting name" do
+    it "raises an error" do
+      settings.setting(:test_setting, 77)
+      settings.refresh!
+      expect {
+        settings.set("provider", "haxxed")
+      }.to raise_error(ArgumentError)
     end
   end
 

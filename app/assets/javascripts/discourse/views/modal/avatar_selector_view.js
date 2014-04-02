@@ -33,13 +33,14 @@ Discourse.AvatarSelectorView = Discourse.ModalBodyView.extend({
 
     // define the upload endpoint
     $upload.fileupload({
-      url: Discourse.getURL("/users/" + this.get("controller.username") + "/preferences/avatar"),
+      url: Discourse.getURL("/users/" + this.get("controller.username") + "/preferences/user_image"),
       dataType: "json",
-      fileInput: $upload
+      fileInput: $upload,
+      formData: { user_image_type: "avatar" }
     });
 
     // when a file has been selected
-    $upload.on("fileuploadadd", function (e, data) {
+    $upload.on("fileuploadadd", function () {
       self.setProperties({
         uploading: true,
         imageIsNotASquare: false
@@ -81,7 +82,7 @@ Discourse.AvatarSelectorView = Discourse.ModalBodyView.extend({
     });
 
     // when the upload is done
-    $upload.on("fileuploadalways", function (e, data) {
+    $upload.on("fileuploadalways", function () {
       self.setProperties({ uploading: false, uploadProgress: 0 });
     });
   },

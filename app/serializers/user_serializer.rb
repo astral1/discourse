@@ -8,9 +8,11 @@ class UserSerializer < BasicUserSerializer
              :bio_cooked,
              :created_at,
              :website,
+             :profile_background,
              :can_edit,
              :can_edit_username,
              :can_edit_email,
+             :can_edit_name,
              :stats,
              :can_send_private_message_to_user,
              :bio_excerpt,
@@ -22,9 +24,10 @@ class UserSerializer < BasicUserSerializer
              :suspended_till
 
   has_one :invited_by, embed: :object, serializer: BasicUserSerializer
+  has_many :custom_groups, embed: :object, serializer: BasicGroupSerializer
 
   def self.private_attributes(*attrs)
-    attributes *attrs
+    attributes(*attrs)
     attrs.each do |attr|
       define_method "include_#{attr}?" do
         can_edit
@@ -46,11 +49,13 @@ class UserSerializer < BasicUserSerializer
   end
 
   private_attributes :email,
+                     :locale,
                      :email_digests,
                      :email_private_messages,
                      :email_direct,
                      :email_always,
                      :digest_after_days,
+                     :mailing_list_mode,
                      :auto_track_topics_after_msecs,
                      :new_topic_duration_minutes,
                      :external_links_in_new_tab,
@@ -59,7 +64,10 @@ class UserSerializer < BasicUserSerializer
                      :use_uploaded_avatar,
                      :has_uploaded_avatar,
                      :gravatar_template,
-                     :uploaded_avatar_template
+                     :uploaded_avatar_template,
+                     :muted_category_ids,
+                     :tracked_category_ids,
+                     :watched_category_ids
 
 
   def auto_track_topics_after_msecs
@@ -86,6 +94,10 @@ class UserSerializer < BasicUserSerializer
     scope.can_edit_email?(object)
   end
 
+  def can_edit_name
+    scope.can_edit_name?(object)
+  end
+
   def stats
     UserAction.stats(object.id, scope)
   end
@@ -100,8 +112,20 @@ class UserSerializer < BasicUserSerializer
   def include_suspend_reason?
     object.suspended?
   end
+
   def include_suspended_till?
     object.suspended?
   end
 
+  def muted_category_ids
+    CategoryUser.lookup(object, :muted).pluck(:category_id)
+  end
+
+  def tracked_category_ids
+    CategoryUser.lookup(object, :tracking).pluck(:category_id)
+  end
+
+  def watched_category_ids
+    CategoryUser.lookup(object, :watching).pluck(:category_id)
+  end
 end

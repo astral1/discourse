@@ -20,6 +20,12 @@ Discourse.EditCategoryController = Discourse.ObjectController.extend(Discourse.M
     });
   }.property(),
 
+  // We can change the parent if there are no children
+  subCategories: function() {
+    if (Em.isEmpty(this.get('id'))) { return null; }
+    return Discourse.Category.list().filterBy('parent_category_id', this.get('id'));
+  }.property('model.id'),
+
   onShow: function() {
     this.changeSize();
     this.titleChanged();
@@ -52,9 +58,9 @@ Discourse.EditCategoryController = Discourse.ObjectController.extend(Discourse.M
     return false;
   }.property('saving', 'name', 'color', 'deleting'),
 
-  deleteVisible: function() {
-    return (this.get('id') && this.get('topic_count') === 0);
-  }.property('id', 'topic_count'),
+  emailInEnabled: function() {
+    return Discourse.SiteSettings.email_in;
+  },
 
   deleteDisabled: function() {
     return (this.get('deleting') || this.get('saving') || false);
@@ -63,6 +69,19 @@ Discourse.EditCategoryController = Discourse.ObjectController.extend(Discourse.M
   colorStyle: function() {
     return "background-color: #" + (this.get('color')) + "; color: #" + (this.get('text_color')) + ";";
   }.property('color', 'text_color'),
+
+  parentStyle: function() {
+    if (this.get('parent_category_id')) {
+      var parent = Discourse.Category.list().findBy('id', parseInt(this.get('parent_category_id'), 10));
+      if (parent) {
+        return 'background-color: #' + parent.get('color') + ';';
+      } else {
+        return 'display: none';
+      }
+    } else {
+      return 'display: none;';
+    }
+  }.property('parent_category_id'),
 
   // background colors are available as a pipe-separated string
   backgroundColors: function() {
@@ -96,6 +115,10 @@ Discourse.EditCategoryController = Discourse.ObjectController.extend(Discourse.M
   deleteButtonTitle: function() {
     return I18n.t('category.delete');
   }.property(),
+
+  showDescription: function() {
+    return !this.get('isUncategorized') && this.get('id');
+  }.property('isUncategorized', 'id'),
 
   actions: {
 
@@ -155,7 +178,7 @@ Discourse.EditCategoryController = Discourse.ObjectController.extend(Discourse.M
         model.setProperties({slug: result.category.slug, id: result.category.id });
         Discourse.URL.redirectTo("/category/" + Discourse.Category.slugFor(model));
 
-      }).fail(function(error) {
+      }).catch(function(error) {
         if (error && error.responseText) {
           self.flash($.parseJSON(error.responseText).errors[0]);
         } else {

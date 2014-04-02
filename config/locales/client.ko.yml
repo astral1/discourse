@@ -2,6 +2,9 @@
 # This file contains content for the client portion of Discourse, sent out
 # to the Javascript app.
 #
+# To work with us on translations, see:
+# https://www.transifex.com/projects/p/discourse-pt-br/
+#
 # To validate this YAML file after you change it, please paste it into
 # http://yamllint.com/
 
@@ -49,6 +52,8 @@ ko:
         almost_x_years:
           one:   "거의 1년"
           other: "거의 %{count}년"
+        date_year: "'YY M/D"
+        date_month: "MMM D"
       medium:
         x_minutes:
           one: "1분"
@@ -445,9 +450,6 @@ ko:
       github:
         title: "GitHub"
         message: "GitHub 인증 중(팝업 차단을 해제 하세요)"
-      persona:
-        title: "Persona"
-        message: "Mozilla Persona 인증 중(팝업 차단을 해제 하세요)"
 
     composer:
       posting_not_on_topic: "어떤 토픽에 답글을 작성하시겠습니까?"
@@ -561,7 +563,7 @@ ko:
     go_back: '돌아가기'
     current_user: '사용자 페이지로 이동'
 
-    favorite:
+    starred:
       title: '즐겨찾기'
       help:
         star: '즐겨찾기로 이 토픽을 추가'
@@ -569,7 +571,7 @@ ko:
 
     topics:
       none:
-        favorited: "아직 즐겨찾기가 없습니다. 토픽을 즐겨찾기하려면 제목 옆 별표를 눌러주세요."
+        starred: "아직 즐겨찾기가 없습니다. 토픽을 즐겨찾기하려면 제목 옆 별표를 눌러주세요."
         unread: "읽지 않은 토픽이 없습니다."
         new: "읽을 새로운 토픽이 없습니다."
         read: "아직 어떠한 토픽도 읽지 않았습니다."
@@ -584,13 +586,8 @@ ko:
         read: "더 이상 읽을 토픽이 없습니다"
         new: "더 이상 읽을 새로운 토픽이 없습니다."
         unread: "더 이상 읽지 않은 토픽이 없습니다"
-        favorited: "더 이상 읽을 즐겨찾기 토픽이 없습니다"
+        starred: "더 이상 읽을 즐겨찾기 토픽이 없습니다"
         category: "더 이상 {{category}}에 토픽이 없습니다"
-
-    rank_details:
-      toggle: 토픽의 랭킹 세부 사항을 토글합니다.
-      show: 토픽의 랭킹 세부 사항을 보여줍니다.
-      title: 토픽의 랭킹 세부 사항
 
     topic:
       filter_to: "이 토픽에서 {{username}}님의 {{post_count}}건의 게시물만 보기"
@@ -813,7 +810,10 @@ ko:
         image_upload_not_allowed_for_new_user: "죄송합니다. 새로운 유저는 이미지를 업로드 하실 수 없습니다."
         attachment_upload_not_allowed_for_new_user: "죄송합니다. 새로운 유저는 파일 첨부를 업로드 하실 수 없습니다."
 
-      abandon: "게시물 작성을 취소 하시겠습니까?"
+      abandon:
+        confirm: "게시물 작성을 취소 하시겠습니까?"
+        no_value: "아니오"
+        yes_value: "예"
 
       archetypes:
         save: '옵션 저장'
@@ -963,7 +963,6 @@ ko:
       list: "카테고리 목록"
       no_description: "이 카테고리에 대한 설명이 없습니다."
       change_in_category_topic: "설명 편집"
-      hotness: "활발한"
       already_used: '이 색은 다른 카테고리에서 사용되고 있습니다.'
       security: "보안"
       auto_close_label: "토픽 자동 닫기 :"
@@ -1028,7 +1027,7 @@ ko:
       hot:
         title: "인기 있는 글"
         help: "가장 인기있는 토픽 중 하나를 선택"
-      favorited:
+      starred:
         title: "즐겨찾기"
         help: "즐겨찾기로 표시한 게시글"
       read:
@@ -1417,6 +1416,3 @@ ko:
           rate_limits: '제한'
           developer: '개발자'
           uncategorized: '카테고리 없음'
-
-
-

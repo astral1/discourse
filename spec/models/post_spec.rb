@@ -771,4 +771,48 @@ describe Post do
     end
   end
 
+  describe "cooking" do
+    let(:post) { Fabricate.build(:post, post_args.merge(raw: "please read my blog http://blog.example.com")) }
+
+    it "should add nofollow to links in the post for trust levels below 3" do
+      post.user.trust_level = 2
+      post.save
+      post.cooked.should =~ /nofollow/
+    end
+
+    it "should not add nofollow for trust level 3 and higher" do
+      post.user.trust_level = 3
+      post.save
+      (post.cooked =~ /nofollow/).should be_false
+    end
+  end
+
+  describe "calculate_avg_time" do
+
+    it "should not crash" do
+      Post.calculate_avg_time
+      Post.calculate_avg_time(1.day.ago)
+    end
+  end
+
+
+  describe "has_host_spam" do
+    it "correctly detects host spam" do
+      post = Fabricate(:post, raw: "hello from my site http://www.somesite.com
+                       http://#{GlobalSetting.hostname} ")
+
+      post.total_hosts_usage.should == {"www.somesite.com" => 1}
+      post.acting_user.trust_level = 0
+
+      post.has_host_spam?.should == false
+
+      SiteSetting.stubs(:newuser_spam_host_threshold).returns(1)
+
+      post.has_host_spam?.should == true
+
+      SiteSetting.stubs(:white_listed_spam_host_domains).returns("bla.com,boo.com , somesite.com ")
+      post.has_host_spam?.should == false
+    end
+  end
+
 end

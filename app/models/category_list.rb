@@ -40,6 +40,7 @@ class CategoryList
       @topics_by_id = {}
 
       @all_topics = Topic.where(id: category_featured_topics.map(&:topic_id))
+      @all_topics = @all_topics.includes(:last_poster) if include_latest_posts?
       @all_topics.each do |t|
         t.include_last_poster = true if include_latest_posts? # hint for serialization
         @topics_by_id[t.id] = t
@@ -54,7 +55,7 @@ class CategoryList
     # Find a list of all categories to associate the topics with
     def find_categories
       @categories = Category
-                        .includes(:featured_users)
+                        .includes(:featured_users, subcategories: [:topic_only_relative_url])
                         .secured(@guardian)
                         .order('position asc')
                         .order('COALESCE(categories.posts_week, 0) DESC')
@@ -113,13 +114,19 @@ class CategoryList
     end
 
 
-    # Remove any empty topics unless we can create them (so we can see the controls)
+    # Remove any empty categories unless we can create them (so we can see the controls)
     def prune_empty
-      unless @guardian.can_create?(Category)
+      if !@guardian.can_create?(Category)
         # Remove categories with no featured topics unless we have the ability to edit one
-        @categories.delete_if { |c|
+        @categories.delete_if do |c|
           c.displayable_topics.blank? && c.description.blank?
-        }
+        end
+      elsif !SiteSetting.allow_uncategorized_topics
+        # Don't show uncategorized to admins either, if uncategorized topics are not allowed
+        # and there are none.
+        @categories.delete_if do |c|
+          c.uncategorized? && c.displayable_topics.blank?
+        end
       end
     end
 

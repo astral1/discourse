@@ -3,41 +3,6 @@ require_dependency 'user'
 
 describe User do
 
-  it { should have_many(:posts) }
-  it { should have_many(:notifications).dependent(:destroy) }
-  it { should have_many(:topic_users).dependent(:destroy) }
-  it { should have_many(:topics) }
-  it { should have_many(:user_open_ids).dependent(:destroy) }
-  it { should have_many(:user_actions).dependent(:destroy) }
-  it { should have_many(:post_actions).dependent(:destroy) }
-  it { should have_many(:email_logs).dependent(:destroy) }
-  it { should have_many(:post_timings) }
-  it { should have_many(:topic_allowed_users).dependent(:destroy) }
-  it { should have_many(:topics_allowed) }
-  it { should have_many(:email_tokens).dependent(:destroy) }
-  it { should have_many(:views) }
-  it { should have_many(:user_visits).dependent(:destroy) }
-  it { should have_many(:invites).dependent(:destroy) }
-  it { should have_many(:topic_links).dependent(:destroy) }
-  it { should have_many(:uploads) }
-
-  it { should have_one(:facebook_user_info).dependent(:destroy) }
-  it { should have_one(:twitter_user_info).dependent(:destroy) }
-  it { should have_one(:github_user_info).dependent(:destroy) }
-  it { should have_one(:cas_user_info).dependent(:destroy) }
-  it { should have_one(:oauth2_user_info).dependent(:destroy) }
-  it { should have_one(:user_stat).dependent(:destroy) }
-  it { should belong_to(:approved_by) }
-
-  it { should have_many(:group_users).dependent(:destroy) }
-  it { should have_many(:groups) }
-  it { should have_many(:secure_categories) }
-
-  it { should have_one(:user_search_data).dependent(:destroy) }
-  it { should have_one(:api_key).dependent(:destroy) }
-
-  it { should belong_to(:uploaded_avatar).dependent(:destroy) }
-
   it { should validate_presence_of :username }
   it { should validate_presence_of :email }
 
@@ -176,6 +141,34 @@ describe User do
       end
     end
 
+    describe 'allow custom minimum username length from site settings' do
+      before do
+        @custom_min = User::GLOBAL_USERNAME_LENGTH_RANGE.begin - 1
+        SiteSetting.stubs("min_username_length").returns(@custom_min)
+      end
+
+      it 'should allow a shorter username than default' do
+        result = user.change_username('a' * @custom_min)
+        result.should_not be_false
+      end
+
+      it 'should not allow a shorter username than limit' do
+        result = user.change_username('a' * (@custom_min - 1))
+        result.should be_false
+      end
+
+      it 'should not allow a longer username than limit' do
+        result = user.change_username('a' * (User::GLOBAL_USERNAME_LENGTH_RANGE.end + 1))
+        result.should be_false
+      end
+
+      it 'should use default length for validation if enforce_global_nicknames is true' do
+        SiteSetting.stubs('enforce_global_nicknames').returns(true)
+
+        User::username_length.begin.should == User::GLOBAL_USERNAME_LENGTH_RANGE.begin
+        User::username_length.end.should == User::GLOBAL_USERNAME_LENGTH_RANGE.end
+      end
+    end
   end
 
   describe 'delete posts' do
@@ -423,7 +416,7 @@ describe User do
   end
 
   describe 'username format' do
-    it "should always be 3 chars or longer" do
+    it "should be #{SiteSetting.min_username_length} chars or longer" do
       @user = Fabricate.build(:user)
       @user.username = 'ss'
       @user.save.should == false
@@ -762,20 +755,39 @@ describe User do
     context "with a user that has a link in their bio" do
       let(:user) { Fabricate.build(:user, bio_raw: "im sissy and i love http://ponycorns.com") }
 
-      before do
-        # Let's cook that bio up good
+      it "includes the link as nofollow if the user is not new" do
         user.send(:cook)
-      end
-
-      it "includes the link if the user is not new" do
         expect(user.bio_excerpt).to eq("im sissy and i love <a href='http://ponycorns.com' rel='nofollow'>http://ponycorns.com</a>")
         expect(user.bio_processed).to eq("<p>im sissy and i love <a href=\"http://ponycorns.com\" rel=\"nofollow\">http://ponycorns.com</a></p>")
       end
 
       it "removes the link if the user is new" do
         user.trust_level = TrustLevel.levels[:newuser]
+        user.send(:cook)
         expect(user.bio_excerpt).to eq("im sissy and i love http://ponycorns.com")
         expect(user.bio_processed).to eq("<p>im sissy and i love http://ponycorns.com</p>")
+      end
+
+      it "includes the link without nofollow if the user is trust level 3 or higher" do
+        user.trust_level = TrustLevel.levels[:leader]
+        user.send(:cook)
+        expect(user.bio_excerpt).to eq("im sissy and i love <a href='http://ponycorns.com'>http://ponycorns.com</a>")
+        expect(user.bio_processed).to eq("<p>im sissy and i love <a href=\"http://ponycorns.com\">http://ponycorns.com</a></p>")
+      end
+
+      it "removes nofollow from links in bio when trust level is increased" do
+        user.save
+        user.change_trust_level!(:leader)
+        expect(user.bio_excerpt).to eq("im sissy and i love <a href='http://ponycorns.com'>http://ponycorns.com</a>")
+        expect(user.bio_processed).to eq("<p>im sissy and i love <a href=\"http://ponycorns.com\">http://ponycorns.com</a></p>")
+      end
+
+      it "adds nofollow to links in bio when trust level is decreased" do
+        user.trust_level = TrustLevel.levels[:leader]
+        user.save
+        user.change_trust_level!(:regular)
+        expect(user.bio_excerpt).to eq("im sissy and i love <a href='http://ponycorns.com' rel='nofollow'>http://ponycorns.com</a>")
+        expect(user.bio_processed).to eq("<p>im sissy and i love <a href=\"http://ponycorns.com\" rel=\"nofollow\">http://ponycorns.com</a></p>")
       end
     end
 
@@ -903,6 +915,36 @@ describe User do
 
   end
 
+  describe "posted too much in topic" do
+    let!(:user) { Fabricate(:user, trust_level: TrustLevel.levels[:newuser]) }
+    let!(:topic) { Fabricate(:post).topic }
+
+    before do
+      # To make testing easier, say 1 reply is too much
+      SiteSetting.stubs(:newuser_max_replies_per_topic).returns(1)
+    end
+
+    context "for a user who didn't create the topic" do
+      let!(:post) { Fabricate(:post, topic: topic, user: user) }
+
+      it "does not return true for staff" do
+        user.stubs(:staff?).returns(true)
+        user.posted_too_much_in_topic?(topic.id).should be_false
+      end
+
+      it "returns true when the user has posted too much" do
+        user.posted_too_much_in_topic?(topic.id).should be_true
+      end
+    end
+
+    it "returns false for a user who created the topic" do
+      topic_user = topic.user
+      topic_user.trust_level = TrustLevel.levels[:newuser]
+      topic.user.posted_too_much_in_topic?(topic.id).should be_false
+    end
+
+  end
+
   describe "#find_email" do
 
     let(:user) { Fabricate(:user, email: "bob@example.com") }
@@ -934,7 +976,7 @@ describe User do
 
   describe ".small_avatar_url" do
 
-    let(:user) { build(:user, use_uploaded_avatar: true, uploaded_avatar_template: "http://test.localhost/uploaded/avatar/template/{size}.png") }
+    let(:user) { build(:user, use_uploaded_avatar: true, uploaded_avatar_template: "/uploaded/avatar/template/{size}.png") }
 
     it "returns a 45-pixel-wide avatar" do
       user.small_avatar_url.should == "//test.localhost/uploaded/avatar/template/45.png"
@@ -944,7 +986,7 @@ describe User do
 
   describe ".uploaded_avatar_path" do
 
-    let(:user) { build(:user, use_uploaded_avatar: true, uploaded_avatar_template: "http://test.localhost/uploaded/avatar/template/{size}.png") }
+    let(:user) { build(:user, use_uploaded_avatar: true, uploaded_avatar_template: "/uploaded/avatar/template/{size}.png") }
 
     it "returns nothing when uploaded avatars are not allowed" do
       SiteSetting.expects(:allow_uploaded_avatars).returns(false)
@@ -955,6 +997,11 @@ describe User do
       user.uploaded_avatar_path.should == "//test.localhost/uploaded/avatar/template/{size}.png"
     end
 
+    it "returns a schemaless cdn-based avatar template" do
+      Rails.configuration.action_controller.stubs(:asset_host).returns("http://my.cdn.com")
+      user.uploaded_avatar_path.should == "//my.cdn.com/uploaded/avatar/template/{size}.png"
+    end
+
   end
 
   describe ".avatar_template" do
@@ -962,14 +1009,142 @@ describe User do
     let(:user) { build(:user, email: "em@il.com") }
 
     it "returns the uploaded_avatar_path by default" do
-      user.expects(:uploaded_avatar_path).returns("/uploaded/avatar.png")
-      user.avatar_template.should == "/uploaded/avatar.png"
+      user.expects(:uploaded_avatar_path).returns("//discourse.org/uploaded/avatar.png")
+      user.avatar_template.should == "//discourse.org/uploaded/avatar.png"
     end
 
     it "returns the gravatar when no avatar has been uploaded" do
       user.expects(:uploaded_avatar_path)
       User.expects(:gravatar_template).with(user.email).returns("//gravatar.com/avatar.png")
       user.avatar_template.should == "//gravatar.com/avatar.png"
+    end
+
+  end
+
+  describe "update_posts_read!" do
+    context "with a UserVisit record" do
+      let!(:user) { Fabricate(:user) }
+      let!(:now)  { Time.zone.now }
+      before { user.update_last_seen!(now) }
+
+      it "with existing UserVisit record, increments the posts_read value" do
+        expect {
+          user_visit = user.update_posts_read!(2)
+          user_visit.posts_read.should == 2
+        }.to_not change { UserVisit.count }
+      end
+
+      it "with no existing UserVisit record, creates a new UserVisit record and increments the posts_read count" do
+        expect {
+          user_visit = user.update_posts_read!(3, 5.days.ago)
+          user_visit.posts_read.should == 3
+        }.to change { UserVisit.count }.by(1)
+      end
+    end
+  end
+
+  describe "primary_group_id" do
+    let!(:user) { Fabricate(:user) }
+
+    it "has no primary_group_id by default" do
+      user.primary_group_id.should be_nil
+    end
+
+    context "when the user has a group" do
+      let!(:group) { Fabricate(:group) }
+
+      before do
+        group.usernames = user.username
+        group.save
+        user.primary_group_id = group.id
+        user.save
+        user.reload
+      end
+
+      it "should allow us to use it as a primary group" do
+        user.primary_group_id.should == group.id
+
+        # If we remove the user from the group
+        group.usernames = ""
+        group.save
+
+        # It should unset it from the primary_group_id
+        user.reload
+        user.primary_group_id.should be_nil
+      end
+    end
+  end
+
+  describe "should_be_redirected_to_top" do
+    let!(:user) { Fabricate(:user) }
+
+    it "should be redirected to top when there is a reason to" do
+      user.expects(:redirected_to_top_reason).returns("42")
+      user.should_be_redirected_to_top.should == true
+    end
+
+    it "should not be redirected to top when there is no reason to" do
+      user.expects(:redirected_to_top_reason).returns(nil)
+      user.should_be_redirected_to_top.should == false
+    end
+
+  end
+
+  describe "redirected_to_top_reason" do
+    let!(:user) { Fabricate(:user) }
+
+    it "should have no reason when redirect_users_to_top_page is disabled" do
+      SiteSetting.expects(:redirect_users_to_top_page).returns(false)
+      user.redirected_to_top_reason.should == nil
+    end
+
+    context "redirect_users_to_top_page is enabled" do
+      before { SiteSetting.stubs(:redirect_users_to_top_page).returns(true) }
+
+      it "should have no reason when top is not in the top_menu" do
+        SiteSetting.expects(:top_menu).returns("latest")
+        user.redirected_to_top_reason.should == nil
+      end
+
+      it "should have no reason when there isn't enough topics" do
+        SiteSetting.expects(:top_menu).returns("latest|top")
+        SiteSetting.expects(:has_enough_topics_to_redirect_to_top).returns(false)
+        user.redirected_to_top_reason.should == nil
+      end
+
+      describe "new users" do
+        before do
+          user.expects(:trust_level).returns(0)
+          user.stubs(:last_seen_at).returns(1.day.ago)
+          SiteSetting.expects(:top_menu).returns("latest|top")
+          SiteSetting.expects(:has_enough_topics_to_redirect_to_top).returns(true)
+          SiteSetting.expects(:redirect_new_users_to_top_page_duration).returns(7)
+        end
+
+        it "should have a reason for newly created user" do
+          user.expects(:created_at).returns(5.days.ago)
+          user.redirected_to_top_reason.should == I18n.t('redirected_to_top_reasons.new_user')
+        end
+
+        it "should not have a reason for newly created user" do
+          user.expects(:created_at).returns(10.days.ago)
+          user.redirected_to_top_reason.should == nil
+        end
+      end
+
+      describe "old users" do
+        before do
+          user.stubs(:trust_level).returns(1)
+          SiteSetting.expects(:top_menu).returns("latest|top")
+          SiteSetting.expects(:has_enough_topics_to_redirect_to_top).returns(true)
+        end
+
+        it "should have a reason for long-time-no-see users" do
+          user.last_seen_at = 2.months.ago
+          user.redirected_to_top_reason.should == I18n.t('redirected_to_top_reasons.not_seen_in_a_month')
+        end
+      end
+
     end
 
   end

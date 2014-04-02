@@ -11,7 +11,7 @@ Discourse.HeaderController = Discourse.Controller.extend({
   showExtraInfo: null,
   notifications: null,
 
-  showFavoriteButton: function() {
+  showStarButton: function() {
     return Discourse.User.current() && !this.get('topic.isPrivateMessage');
   }.property('topic.isPrivateMessage'),
 
@@ -30,6 +30,13 @@ Discourse.HeaderController = Discourse.Controller.extend({
         self.set("currentUser.unread_notifications", 0);
         headerView.showDropdownBySelector("#user-notifications");
       });
+    },
+
+    jumpToTopPost: function () {
+      var topic = this.get('topic');
+      if (topic) {
+        Discourse.URL.routeTo(topic.get('firstPostUrl'));
+      }
     }
   }
 

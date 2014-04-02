@@ -59,17 +59,14 @@ class Topic < ActiveRecord::Base
                                      :if => Proc.new { |t|
                                            (t.new_record? || t.category_id_changed?) &&
                                            !SiteSetting.allow_uncategorized_topics &&
-                                           (t.archetype.nil? || t.archetype == Archetype.default)
+                                           (t.archetype.nil? || t.archetype == Archetype.default) &&
+                                           (!t.user_id || !t.user.staff?)
                                        }
 
 
   before_validation do
     self.sanitize_title
     self.title = TextCleaner.clean_title(TextSentinel.title_sentinel(title).text) if errors[:title].empty?
-  end
-
-  unless rails4?
-    serialize :meta_data, ActiveRecord::Coders::Hstore
   end
 
   belongs_to :category
@@ -81,7 +78,7 @@ class Topic < ActiveRecord::Base
   has_many :allowed_groups, through: :topic_allowed_groups, source: :group
   has_many :allowed_users, through: :topic_allowed_users, source: :user
 
-  has_one :hot_topic
+  has_one :top_topic
   belongs_to :user
   belongs_to :last_poster, class_name: 'User', foreign_key: :last_post_user_id
   belongs_to :featured_user1, class_name: 'User', foreign_key: :featured_user1_id
@@ -95,7 +92,6 @@ class Topic < ActiveRecord::Base
   has_many :topic_invites
   has_many :invites, through: :topic_invites, source: :invite
 
-  has_many :topic_revisions
   has_many :revisions, foreign_key: :topic_id, class_name: 'TopicRevision'
 
   # When we want to temporarily attach some data to a forum topic (usually before serialization)
@@ -136,10 +132,10 @@ class Topic < ActiveRecord::Base
            WHERE #{condition[0]})", condition[1])
   }
 
-  # Helps us limit how many favorites can be made in a day
-  class FavoriteLimiter < RateLimiter
+  # Helps us limit how many topics can be starred in a day
+  class StarLimiter < RateLimiter
     def initialize(user)
-      super(user, "favorited:#{Date.today.to_s}", SiteSetting.max_favorites_per_day, 1.day.to_i)
+      super(user, "starred:#{Date.today.to_s}", SiteSetting.max_stars_per_day, 1.day.to_i)
     end
   end
 
@@ -192,13 +188,20 @@ class Topic < ActiveRecord::Base
 
   end
 
+  # TODO move into PostRevisor or TopicRevisor
   def save_revision
-    TopicRevision.create!(
-      user_id: acting_user.id,
-      topic_id: id,
-      number: TopicRevision.where(topic_id: id).count + 2,
-      modifications: changes.extract!(:category, :title)
-    )
+    if first_post_id = posts.where(post_number: 1).pluck(:id).first
+
+      number = PostRevision.where(post_id: first_post_id).count + 2
+      PostRevision.create!(
+        user_id: acting_user.id,
+        post_id: first_post_id,
+        number: number,
+        modifications: changes.extract!(:category_id, :title)
+      )
+
+      Post.where(id: first_post_id).update_all(version: number)
+    end
   end
 
   def should_create_new_version?
@@ -365,15 +368,25 @@ class Topic < ActiveRecord::Base
   end
 
   # This calculates the geometric mean of the posts and stores it with the topic
-  def self.calculate_avg_time
-    exec_sql("UPDATE topics
+  def self.calculate_avg_time(min_topic_age=nil)
+    builder = SqlBuilder.new("UPDATE topics
               SET avg_time = x.gmean
               FROM (SELECT topic_id,
                            round(exp(avg(ln(avg_time)))) AS gmean
                     FROM posts
                     WHERE avg_time > 0 AND avg_time IS NOT NULL
                     GROUP BY topic_id) AS x
-              WHERE x.topic_id = topics.id AND (topics.avg_time <> x.gmean OR topics.avg_time IS NULL)")
+              /*where*/")
+
+    builder.where("x.topic_id = topics.id AND
+                  (topics.avg_time <> x.gmean OR topics.avg_time IS NULL)")
+
+    if min_topic_age
+      builder.where("topics.bumped_at > :bumped_at",
+                   bumped_at: min_topic_age)
+    end
+
+    builder.exec
   end
 
   def changed_to_category(cat)
@@ -546,9 +559,9 @@ class Topic < ActiveRecord::Base
                 WHERE id = ?", id
 
       if starred
-        FavoriteLimiter.new(user).performed!
+        StarLimiter.new(user).performed!
       else
-        FavoriteLimiter.new(user).rollback!
+        StarLimiter.new(user).rollback!
       end
     end
   end
@@ -651,11 +664,11 @@ class Topic < ActiveRecord::Base
   #  * A timestamp with timezone in JSON format. (e.g., "2013-11-26T21:00:00.000Z")
   #  * nil, to prevent the topic from automatically closing.
   def set_auto_close(arg, by_user=nil)
-    if arg.is_a?(String) and matches = /^([\d]{1,2}):([\d]{1,2})$/.match(arg.strip)
+    if arg.is_a?(String) && matches = /^([\d]{1,2}):([\d]{1,2})$/.match(arg.strip)
       now = Time.zone.now
       self.auto_close_at = Time.zone.local(now.year, now.month, now.day, matches[1].to_i, matches[2].to_i)
       self.auto_close_at += 1.day if self.auto_close_at < now
-    elsif arg.is_a?(String) and arg.include?('-') and timestamp = Time.zone.parse(arg)
+    elsif arg.is_a?(String) && arg.include?('-') && timestamp = Time.zone.parse(arg)
       self.auto_close_at = timestamp
       self.errors.add(:auto_close_at, :invalid) if timestamp < Time.zone.now
     else
@@ -665,7 +678,7 @@ class Topic < ActiveRecord::Base
 
     unless self.auto_close_at.nil?
       self.auto_close_started_at ||= Time.zone.now
-      if by_user and by_user.staff?
+      if by_user && by_user.staff?
         self.auto_close_user = by_user
       else
         self.auto_close_user ||= (self.user.staff? ? self.user : Discourse.system_user)
@@ -686,6 +699,12 @@ class Topic < ActiveRecord::Base
 
   def acting_user=(u)
     @acting_user = u
+  end
+
+  def secure_group_ids
+    @secure_group_ids ||= if self.category && self.category.read_restricted?
+      self.category.secure_group_ids
+    end
   end
 
   private
@@ -758,11 +777,13 @@ end
 #  auto_close_started_at   :datetime
 #  deleted_by_id           :integer
 #  participant_count       :integer          default(1)
+#  word_count              :integer
+#  excerpt                 :string(1000)
 #
 # Indexes
 #
-#  idx_topics_user_id_deleted_at                                (user_id)
-#  index_forum_threads_on_bumped_at                             (bumped_at)
-#  index_topics_on_deleted_at_and_visible_and_archetype_and_id  (deleted_at,visible,archetype,id)
-#  index_topics_on_id_and_deleted_at                            (id,deleted_at)
+#  idx_topics_front_page              (deleted_at,visible,archetype,category_id,id)
+#  idx_topics_user_id_deleted_at      (user_id)
+#  index_forum_threads_on_bumped_at   (bumped_at)
+#  index_topics_on_id_and_deleted_at  (id,deleted_at)
 #

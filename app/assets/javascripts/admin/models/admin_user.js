@@ -31,10 +31,18 @@ Discourse.AdminUser = Discourse.User.extend({
   **/
   revokeApiKey: function() {
     var self = this;
-    return Discourse.ajax("/admin/users/" + this.get('id') + "/revoke_api_key", {type: 'DELETE'}).then(function (result) {
+    return Discourse.ajax("/admin/users/" + this.get('id') + "/revoke_api_key", {type: 'DELETE'}).then(function () {
       self.set('api_key', null);
     });
   },
+
+  deleteAllPostsExplanation: function() {
+    if (!this.get('can_delete_all_posts')) {
+      return I18n.t('admin.user.cant_delete_all_posts', {count: Discourse.SiteSettings.delete_user_max_post_age});
+    } else {
+      return null;
+    }
+  }.property('can_delete_all_posts'),
 
   deleteAllPosts: function() {
     this.set('can_delete_all_posts', false);
@@ -42,7 +50,7 @@ Discourse.AdminUser = Discourse.User.extend({
     var message = I18n.t('admin.user.delete_all_posts_confirm', {posts: user.get('post_count'), topics: user.get('topic_count')});
     var buttons = [{
       "label": I18n.t("composer.cancel"),
-      "class": "cancel",
+      "class": "cancel-inline",
       "link":  true,
       "callback": function() {
         user.set('can_delete_all_posts', true);
@@ -51,7 +59,7 @@ Discourse.AdminUser = Discourse.User.extend({
       "label": '<i class="fa fa-exclamation-triangle"></i> ' + I18n.t("admin.user.delete_all_posts"),
       "class": "btn btn-danger",
       "callback": function() {
-        Discourse.ajax("/admin/users/" + (user.get('id')) + "/delete_all_posts", {type: 'PUT'}).then(function(result){
+        Discourse.ajax("/admin/users/" + (user.get('id')) + "/delete_all_posts", {type: 'PUT'}).then(function(){
           user.set('post_count', 0);
         });
       }
@@ -243,7 +251,7 @@ Discourse.AdminUser = Discourse.User.extend({
       if (this.get('staff')) {
         return I18n.t('admin.user.delete_forbidden_because_staff');
       } else {
-        return I18n.t('admin.user.delete_forbidden', {count: Discourse.SiteSettings.delete_user_max_age});
+        return I18n.t('admin.user.delete_forbidden', {count: Discourse.SiteSettings.delete_user_max_post_age});
       }
     } else {
       return null;
@@ -274,7 +282,7 @@ Discourse.AdminUser = Discourse.User.extend({
             user.mergeAttributes(data.user);
           }
         }
-      }, function(jqXHR, status, error) {
+      }, function() {
         Discourse.AdminUser.find( user.get('username') ).then(function(u){ user.mergeAttributes(u); });
         bootbox.alert(I18n.t("admin.user.delete_failed"));
       });
@@ -308,7 +316,7 @@ Discourse.AdminUser = Discourse.User.extend({
     var message = I18n.t('flagging.delete_confirm', {posts: user.get('post_count'), topics: user.get('topic_count'), email: user.get('email'), ip_address: user.get('ip_address')});
     var buttons = [{
       "label": I18n.t("composer.cancel"),
-      "class": "cancel",
+      "class": "cancel-inline",
       "link":  true
     }, {
       "label": '<i class="fa fa-exclamation-triangle"></i> ' + I18n.t("flagging.yes_delete_spammer"),
@@ -325,7 +333,7 @@ Discourse.AdminUser = Discourse.User.extend({
           } else {
             bootbox.alert(I18n.t("admin.user.delete_failed"));
           }
-        }, function(jqXHR, status, error) {
+        }, function() {
           bootbox.alert(I18n.t("admin.user.delete_failed"));
         });
       }
@@ -341,7 +349,25 @@ Discourse.AdminUser = Discourse.User.extend({
       model.setProperties(result);
       model.set('loadedDetails', true);
     });
-  }
+  },
+
+  leaderRequirements: function() {
+    if (this.get('leader_requirements')) {
+      return Discourse.LeaderRequirements.create(this.get('leader_requirements'));
+    }
+  }.property('leader_requirements'),
+
+  suspendedBy: function() {
+    if (this.get('suspended_by')) {
+      return Discourse.AdminUser.create(this.get('suspended_by'));
+    }
+  }.property('suspended_by'),
+
+  approvedBy: function() {
+    if (this.get('approved_by')) {
+      return Discourse.AdminUser.create(this.get('approved_by'));
+    }
+  }.property('approved_by')
 
 });
 
@@ -382,7 +408,7 @@ Discourse.AdminUser.reopenClass({
   },
 
   find: function(username) {
-    return Discourse.ajax("/admin/users/" + username).then(function (result) {
+    return Discourse.ajax("/admin/users/" + username + ".json").then(function (result) {
       result.loadedDetails = true;
       return Discourse.AdminUser.create(result);
     });

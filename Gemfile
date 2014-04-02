@@ -1,23 +1,23 @@
 source 'https://rubygems.org'
 
-# monkey patching to support dual booting
-module Bundler::SharedHelpers
-  def default_lockfile=(path)
-    @default_lockfile = path
-  end
-  def default_lockfile
-    @default_lockfile ||= Pathname.new("#{default_gemfile}.lock")
-  end
-end
-
 module ::Kernel
-  def rails4?
-    !ENV["RAILS3"]
+  def rails_master?
+    ENV["RAILS_MASTER"]
   end
 end
 
-if rails4?
-  Bundler::SharedHelpers.default_lockfile = Pathname.new("#{Bundler::SharedHelpers.default_gemfile}_rails4.lock")
+if rails_master?
+  # monkey patching to support dual booting
+  module Bundler::SharedHelpers
+    def default_lockfile=(path)
+      @default_lockfile = path
+    end
+    def default_lockfile
+      @default_lockfile ||= Pathname.new("#{default_gemfile}.lock")
+    end
+  end
+
+  Bundler::SharedHelpers.default_lockfile = Pathname.new("#{Bundler::SharedHelpers.default_gemfile}_master.lock")
 
   # Bundler::Dsl.evaluate already called with an incorrect lockfile ... fix it
   class Bundler::Dsl
@@ -29,41 +29,64 @@ if rails4?
       to_definition_unpatched(Bundler::SharedHelpers.default_lockfile, unlock)
     end
   end
-else
-  # Note to be deprecated, in place of a dual boot master
-  puts "Booting in Rails 3 mode"
+
+end
+
+# Monkey patch bundler to support mri_21
+unless Bundler::Dependency::PLATFORM_MAP.include? :mri_21
+   STDERR.puts
+   STDERR.puts "WARNING: --------------------------------------------------------------------------"
+   STDERR.puts "You are running an old version of bundler, please update by running: gem install bundler"
+   STDERR.puts
+   map = Bundler::Dependency::PLATFORM_MAP.dup
+   map[:mri_21] = Gem::Platform::RUBY
+   map.freeze
+   Bundler::Dependency.send(:remove_const, "PLATFORM_MAP")
+   Bundler::Dependency.const_set("PLATFORM_MAP", map)
+
+   Bundler::Dsl.send(:remove_const, "VALID_PLATFORMS")
+   Bundler::Dsl.const_set("VALID_PLATFORMS", map.keys.freeze)
+   class ::Bundler::CurrentRuby
+      def on_21?
+         RUBY_VERSION =~ /^2\.1/
+      end
+      def mri_21?
+        mri? && on_21?
+      end
+   end
+   class ::Bundler::Dependency
+      private
+      def on_21?
+         RUBY_VERSION =~ /^2\.1/
+      end
+      def mri_21?
+        mri? && on_21?
+      end
+   end
 end
 
 # see: https://github.com/mbleigh/seed-fu/pull/54
 # taking forever to get changes upstream in seed-fu
 gem 'seed-fu-discourse', require: 'seed-fu'
 
-if rails4?
-  gem 'rails'
-  gem 'rails-observers'
-  gem 'actionpack-action_caching'
+if rails_master?
+  gem 'rails', git: 'https://github.com/rails/rails.git'
+  gem 'actionpack-action_caching', git: 'https://github.com/rails/actionpack-action_caching.git'
 else
-  # we had pain with the 3.2.13 upgrade so monkey patch the security fix
-  # next time around we hope to upgrade
-  gem 'rails', '3.2.12'
-  gem 'strong_parameters' # remove when we upgrade to Rails 4
-  # we are using a custom sprockets repo to work around: https://github.com/rails/rails/issues/8099#issuecomment-16137638
-  # REVIEW EVERY RELEASE
-  gem 'sprockets', git: 'https://github.com/SamSaffron/sprockets.git', branch: 'rails-compat'
-  gem 'activerecord-postgres-hstore'
-  gem 'active_attr'
+  gem 'rails'
+  gem 'actionpack-action_caching'
 end
+gem 'rails-observers'
 
-gem 'redis-rails'
+#gem 'redis-rails'
 gem 'hiredis'
-gem 'redis', :require => ["redis", "redis/connection/hiredis"]
+gem 'redis', require:  ["redis", "redis/connection/hiredis"]
 
 gem 'active_model_serializers'
 
-gem 'html_truncator'
 
-# we had issues with latest, stick to the rev till we figure this out
-# PR that makes it all hang together welcome
+gem 'onebox'
+
 gem 'ember-rails'
 gem 'ember-source', '~> 1.2.0.1'
 gem 'handlebars-source', '~> 1.1.2'
@@ -71,11 +94,9 @@ gem 'barber'
 
 gem 'message_bus'
 gem 'rails_multisite', path: 'vendor/gems/rails_multisite'
-gem 'simple_handlebars_rails', path: 'vendor/gems/simple_handlebars_rails'
 
 gem 'redcarpet', require: false
 gem 'airbrake', '3.1.2', require: false # errbit is broken with 3.1.3 for now
-gem 'sidetiq', '>= 0.3.6'
 gem 'eventmachine'
 gem 'fast_xs'
 
@@ -92,7 +113,9 @@ gem 'email_reply_parser-discourse', require: 'email_reply_parser'
 
 # note: for image_optim to correctly work you need
 # sudo apt-get install -y advancecomp gifsicle jpegoptim libjpeg-progs optipng pngcrush
-gem 'image_optim'
+#
+# Sam: held back, getting weird errors in latest
+gem 'image_optim', '0.9.1'
 # note: for image_sorcery to correctly work you need
 # sudo apt-get install -y imagemagick
 gem 'image_sorcery'
@@ -106,11 +129,6 @@ gem 'omniauth-facebook'
 gem 'omniauth-twitter'
 gem 'omniauth-github'
 gem 'omniauth-oauth2', require: false
-# abandoned gem hard to tell what is going on, multiple PRs upstream being ignored:
-# https://twitter.com/samsaffron/status/412372111710109696
-# we use: gem 'omniauth-browserid', git: 'https://github.com/samsaffron/omniauth-browserid.git', branch: 'observer_api'
-gem 'omniauth-browserid-discourse', require: 'omniauth-browserid'
-gem 'omniauth-cas'
 gem 'oj'
 # while resolving https://groups.google.com/forum/#!topic/ruby-pg/5_ylGmog1S4
 gem 'pg', '0.15.1'
@@ -121,13 +139,12 @@ gem 'rest-client'
 gem 'rinku'
 gem 'sanitize'
 gem 'sass'
-gem 'sidekiq', '2.15.1'
+gem 'sidekiq'
 gem 'sidekiq-failures'
 gem 'sinatra', require: nil
 gem 'slim'  # required for sidekiq-web
 
-# URGENT fix needed see: https://github.com/cowboyd/therubyracer/pull/280
-gem 'therubyracer-discourse', require: 'v8'
+gem 'therubyracer'
 gem 'thin', require: false
 gem 'highline', require: false
 gem 'rack-protection' # security
@@ -136,7 +153,7 @@ gem 'rack-protection' # security
 # in production environments by default.
 # allow everywhere for now cause we are allowing asset debugging in prd
 group :assets do
-  gem 'sass-rails'
+  gem 'sass-rails', '~> 4.0.2'
   gem 'uglifier'
 end
 
@@ -169,6 +186,7 @@ group :development do
   gem 'binding_of_caller'
   gem 'librarian', '>= 0.0.25', require: false
   gem 'annotate'
+  gem 'foreman', require: false
 end
 
 # Gem that enables support for plugins. It is required.
@@ -185,16 +203,22 @@ gem 'lru_redux'
 
 # IMPORTANT: mini profiler monkey patches, so it better be required last
 #  If you want to amend mini profiler to do the monkey patches in the railstie
-#  we are open to it. by deferring require to the initializer we can configure disourse installs without it
+#  we are open to it. by deferring require to the initializer we can configure discourse installs without it
 
 gem 'flamegraph', require: false
-gem 'rack-mini-profiler',  '0.9.0.pre ', require: false
+gem 'rack-mini-profiler', require: false
 
 # used for caching, optional
 gem 'rack-cors', require: false
 gem 'unicorn', require: false
 gem 'puma', require: false
-gem 'rbtrace', require: false
+gem 'rbtrace', require: false, platform: :mri
+
+# required for feed importing and embedding
+gem 'ruby-readability', require: false
+gem 'simple-rss', require: false
+gem 'gctools', require: false, platform: :mri_21
+gem 'stackprof', require: false, platform: :mri_21
 
 # perftools only works on 1.9 atm
 group :profile do

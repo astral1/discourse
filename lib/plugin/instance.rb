@@ -93,10 +93,14 @@ class Plugin::Instance
     @javascripts << js
   end
 
-
   def register_asset(file,opts=nil)
     full_path = File.dirname(path) << "/assets/" << file
-    assets << full_path
+    if opts == :admin
+      @admin_javascripts ||= []
+      @admin_javascripts << full_path
+    else
+      assets << full_path
+    end
     if opts == :server_side
       @server_side_javascripts ||= []
       @server_side_javascripts << full_path
@@ -154,16 +158,24 @@ class Plugin::Instance
     end
     unless assets.blank?
       assets.each do |asset|
-        if asset =~ /\.js$|.js.erb$/
+        if asset =~ /\.js$|\.js\.erb$/
           DiscoursePluginRegistry.javascripts << asset
         elsif asset =~ /\.css$|\.scss$/
           DiscoursePluginRegistry.stylesheets << asset
+        elsif asset =~ /\.js\.handlebars$/
+          DiscoursePluginRegistry.handlebars << asset
         end
       end
 
       # TODO possibly amend this to a rails engine
       Rails.configuration.assets.paths << auto_generated_path
       Rails.configuration.assets.paths << File.dirname(path) + "/assets"
+    end
+
+    if @admin_javascripts
+      @admin_javascripts.each do |js|
+        DiscoursePluginRegistry.admin_javascripts << js
+      end
     end
 
     if @server_side_javascripts
@@ -176,7 +188,7 @@ class Plugin::Instance
     if Dir.exists?(public_data)
       target = Rails.root.to_s + "/public/plugins/"
       `mkdir -p #{target}`
-      target << name
+      target << name.gsub(/\s/,"_")
       # TODO a cleaner way of registering and unregistering
       `rm -f #{target}`
       `ln -s #{public_data} #{target}`
@@ -204,7 +216,10 @@ class Plugin::Instance
     spec_path = gems_path + "/specifications"
     spec_file = spec_path + "/#{name}-#{version}.gemspec"
     unless File.exists? spec_file
-      command = "gem install #{name} -v #{version} -i #{gems_path} --no-rdoc --no-ri"
+      command = "gem install #{name} -v #{version} -i #{gems_path} --no-document --ignore-dependencies"
+      if opts[:source]
+        command << " --source #{opts[:source]}"
+      end
       puts command
       puts `#{command}`
     end
@@ -212,7 +227,7 @@ class Plugin::Instance
       spec = Gem::Specification.load spec_file
       spec.activate
       unless opts[:require] == false
-        require name
+        require opts[:require_name] ? opts[:require_name] : name
       end
     else
       puts "You are specifying the gem #{name} in #{path}, however it does not exist!"
